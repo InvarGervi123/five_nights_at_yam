@@ -83,6 +83,7 @@ class AudioManager {
     this.currentMusic = null;
     this.currentAmbient = null;
     this.phoneAudio = null;
+    this.activeSfxClones = new Set();
     this.initWebAudio();
     this.preloadSounds();
   }
@@ -103,8 +104,7 @@ class AudioManager {
   preloadSounds() {
     const s = GAME_CONFIG.sounds;
     for (const [key, path] of Object.entries(s)) {
-      const audio = new Audio();
-      audio.src = path;
+      const audio = new Audio(path);
       audio.preload = 'auto';
       this.sounds[key] = audio;
     }
@@ -122,19 +122,53 @@ class AudioManager {
     return this.saveManager.data.settings.volSfx * this.getMasterVolume();
   }
 
-  playSfx(key, loop = false) {
+  // השמעת SFX קצר וממוקד - סאונדים ארוכים כמו baldi נחתכים אחרי שנייה
+  playSfx(key, loop = false, maxDuration = null) {
     this.resumeContext();
     const sound = this.sounds[key];
     if (!sound) return null;
     try {
-      const clone = loop ? sound : sound.cloneNode();
-      clone.volume = this.getSfxVolume();
-      clone.loop = loop;
-      clone.currentTime = 0;
-      clone.play().catch(() => {});
-      return clone;
+      sound.pause();
+      sound.currentTime = 0;
+      sound.volume = this.getSfxVolume();
+      sound.loop = loop;
+      sound.play().catch(() => {});
+
+      // אם זה סאונד ארוך כמו baldi, חותכים אותו אחרי 1.2 שניות
+      const cutoffs = {
+        baldi: 1.2,
+        crack: 1.0,
+        rip: 1.4,
+        gameOver: 1.8,
+        phoneCall: null
+      };
+
+      const duration = maxDuration !== null ? maxDuration : cutoffs[key];
+      if (duration) {
+        if (sound._stopTimeout) clearTimeout(sound._stopTimeout);
+        sound._stopTimeout = setTimeout(() => {
+          try {
+            sound.pause();
+            sound.currentTime = 0;
+          } catch (e) {}
+        }, duration * 1000);
+      }
+
+      return sound;
     } catch (e) {
       return null;
+    }
+  }
+
+  stopAllSounds() {
+    this.stopMusic();
+    this.stopAmbient();
+    this.stopPhoneCall();
+    for (const sound of Object.values(this.sounds)) {
+      try {
+        sound.pause();
+        sound.currentTime = 0;
+      } catch (e) {}
     }
   }
 
@@ -143,17 +177,22 @@ class AudioManager {
     this.stopMusic();
     const sound = this.sounds[key];
     if (!sound) return;
-    sound.volume = this.getMusicVolume();
-    sound.loop = loop;
-    sound.currentTime = 0;
-    sound.play().catch(() => {});
-    this.currentMusic = sound;
+    try {
+      sound.pause();
+      sound.currentTime = 0;
+      sound.volume = this.getMusicVolume();
+      sound.loop = loop;
+      sound.play().catch(() => {});
+      this.currentMusic = sound;
+    } catch (e) {}
   }
 
   stopMusic() {
     if (this.currentMusic) {
-      this.currentMusic.pause();
-      this.currentMusic.currentTime = 0;
+      try {
+        this.currentMusic.pause();
+        this.currentMusic.currentTime = 0;
+      } catch (e) {}
       this.currentMusic = null;
     }
   }
@@ -163,17 +202,22 @@ class AudioManager {
     this.stopAmbient();
     const sound = this.sounds[key];
     if (!sound) return;
-    sound.volume = this.getMusicVolume() * 0.75;
-    sound.loop = true;
-    sound.currentTime = 0;
-    sound.play().catch(() => {});
-    this.currentAmbient = sound;
+    try {
+      sound.pause();
+      sound.currentTime = 0;
+      sound.volume = this.getMusicVolume() * 0.75;
+      sound.loop = true;
+      sound.play().catch(() => {});
+      this.currentAmbient = sound;
+    } catch (e) {}
   }
 
   stopAmbient() {
     if (this.currentAmbient) {
-      this.currentAmbient.pause();
-      this.currentAmbient.currentTime = 0;
+      try {
+        this.currentAmbient.pause();
+        this.currentAmbient.currentTime = 0;
+      } catch (e) {}
       this.currentAmbient = null;
     }
   }
@@ -182,16 +226,21 @@ class AudioManager {
     this.stopPhoneCall();
     const audio = this.sounds['phoneCall'];
     if (!audio) return;
-    audio.volume = this.getSfxVolume() * 0.9;
-    audio.currentTime = 0;
-    audio.play().catch(() => {});
-    this.phoneAudio = audio;
+    try {
+      audio.pause();
+      audio.currentTime = 0;
+      audio.volume = this.getSfxVolume() * 0.9;
+      audio.play().catch(() => {});
+      this.phoneAudio = audio;
+    } catch (e) {}
   }
 
   stopPhoneCall() {
     if (this.phoneAudio) {
-      this.phoneAudio.pause();
-      this.phoneAudio.currentTime = 0;
+      try {
+        this.phoneAudio.pause();
+        this.phoneAudio.currentTime = 0;
+      } catch (e) {}
       this.phoneAudio = null;
     }
   }
@@ -615,6 +664,8 @@ class FiveNightsAtYam {
       if (e.key === 'q' || e.key === 'Q' || e.key === '/') this.setLight('left', !this.leftLightOn);
       if (e.key === 'e' || e.key === 'E' || e.key === 'ק') this.setLight('right', !this.rightLightOn);
       if (e.key === ' ' || e.key === 's' || e.key === 'S' || e.key === 'ד') this.toggleMonitor();
+      // מקש לבדיקות: P או פ למעבר שעה קדימה
+      if (e.key === 'p' || e.key === 'P' || e.key === 'פ') this.advanceHour();
     });
   }
 
@@ -648,9 +699,8 @@ class FiveNightsAtYam {
 
     if (screenName === 'menu') {
       this.updateMenuUI();
+      this.audio.stopAllSounds();
       this.audio.playMusic('menu');
-      this.audio.stopAmbient();
-      this.audio.stopPhoneCall();
       this.dom.jumpscare.overlay.classList.add('hidden');
     }
   }
@@ -885,24 +935,29 @@ class FiveNightsAtYam {
   }
 
   // ================= ניהול שעון וזמן לילה (Clock & Night Progression) =================
+  advanceHour() {
+    if (this.gameState !== 'PLAYING') return;
+    this.hourProgress = 0;
+    this.gameHour++;
+    this.updateClockUI();
+
+    // עלייה באגרסיביות אויבים בכל שעה
+    this.aiLevels.yam = Math.min(20, this.aiLevels.yam + 1);
+    this.aiLevels.invar = Math.min(20, this.aiLevels.invar + 1);
+
+    this.audio.playBeep(523, 'sine', 0.2);
+
+    if (this.gameHour >= GAME_CONFIG.time.totalHoursPerNight) {
+      this.winNight();
+    }
+  }
+
   updateClock(dt) {
     if (this.isBlackout) return;
 
     this.hourProgress += dt;
     if (this.hourProgress >= GAME_CONFIG.time.hourDurationSeconds) {
-      this.hourProgress = 0;
-      this.gameHour++;
-      this.updateClockUI();
-
-      // עלייה באגרסיביות אויבים בכל שעה
-      this.aiLevels.yam = Math.min(20, this.aiLevels.yam + 1);
-      this.aiLevels.invar = Math.min(20, this.aiLevels.invar + 1);
-      
-      this.audio.playBeep(523, 'sine', 0.2);
-
-      if (this.gameHour >= GAME_CONFIG.time.totalHoursPerNight) {
-        this.winNight();
-      }
+      this.advanceHour();
     }
   }
 
@@ -1364,9 +1419,7 @@ class FiveNightsAtYam {
     if (this.mainLoopInterval) clearInterval(this.mainLoopInterval);
 
     this.closeMonitor();
-    this.audio.stopAmbient();
-    this.audio.stopMusic();
-    this.audio.stopPhoneCall();
+    this.audio.stopAllSounds();
 
     // בחירת תמונת ג'אמפסקר
     let jumpscareImg = GAME_CONFIG.images.characters.yamAngry;
@@ -1391,6 +1444,7 @@ class FiveNightsAtYam {
 
   showGameOver(causeText) {
     this.gameState = 'GAMEOVER';
+    this.audio.stopAllSounds();
     this.dom.gameOver.cause.textContent = causeText;
     const hours = ['12 AM', '1 AM', '2 AM', '3 AM', '4 AM', '5 AM'];
     this.dom.gameOver.timeSurvived.textContent = `שרדת עד: ${hours[this.gameHour] || '12 AM'}`;
