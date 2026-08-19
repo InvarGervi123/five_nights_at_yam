@@ -1,0 +1,454 @@
+<!DOCTYPE html>
+<html lang="he" dir="rtl">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no, viewport-fit=cover">
+  <meta name="theme-color" content="#050508">
+  <meta name="apple-mobile-web-app-capable" content="yes">
+  <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
+  <meta name="description" content="Five Nights at Yam - משחק אימה והישרדות אותנטי">
+  <title>Five Nights at Yam | חמישה לילות אצל ים</title>
+  <!-- טעינה מותאמת של מניפסט עבור שרתי Web מבלי לזרוק שגיאת CORS ב-file:/// -->
+  <script>
+    if (window.location.protocol.startsWith('http')) {
+      const link = document.createElement('link');
+      link.rel = 'manifest';
+      link.href = 'manifest.json';
+      document.head.appendChild(link);
+    }
+  </script>
+  <link rel="stylesheet" href="style.css">
+</head>
+<body class="crt-filter">
+
+  <!-- שכבת אפקט סריקה ורעש CRT -->
+  <div id="crt-overlay"></div>
+  <canvas id="static-noise-canvas"></canvas>
+
+  <!-- הודעת אזהרה בהטיית מסך לניידים (במצב Portrait מומלץ לסובב) -->
+  <div id="rotate-device-hint">
+    <div class="rotate-box">
+      <div class="phone-icon">📱 ➔ 🔄</div>
+      <h2>נא לסובב את הטלפון לרוחב</h2>
+      <p>לחוויית FNAF מקסימלית ושליטה מלאה במצלמות ובדלתות</p>
+      <button id="btn-dismiss-rotate" class="fnaf-btn small">המשך בכל זאת</button>
+    </div>
+  </div>
+
+  <!-- ================= תפריט ראשי (FNAF Main Menu) ================= -->
+  <section id="main-menu" class="screen active">
+    <div class="menu-background">
+      <img id="menu-character" src="images/characters/yam.png" alt="Yam Character" class="twitch-anim">
+      <div class="vignette-overlay"></div>
+    </div>
+
+    <div class="menu-content">
+      <div class="menu-header">
+        <h1 class="game-title">Five Nights<br><span class="title-sub">at Yam</span></h1>
+        <p class="game-subtitle">חמישה לילות אצל ים</p>
+        <div id="menu-stars" class="menu-stars">
+          <!-- כוכבי ניצחון דינמיים -->
+        </div>
+      </div>
+
+      <div class="menu-options">
+        <button id="btn-new-game" class="fnaf-menu-btn"><span class="btn-arrow">»</span> משחק חדש (לילה 1)</button>
+        <button id="btn-continue" class="fnaf-menu-btn"><span class="btn-arrow">»</span> המשך (<span id="continue-night-num">לילה 1</span>)</button>
+        <button id="btn-night-6" class="fnaf-menu-btn locked" disabled><span class="btn-arrow">»</span> לילה 6 (סיוט)</button>
+        <button id="btn-custom-night" class="fnaf-menu-btn locked" disabled><span class="btn-arrow">»</span> Custom Night</button>
+        <button id="btn-how-to-play" class="fnaf-menu-btn"><span class="btn-arrow">»</span> מדריך הישרדות</button>
+        <button id="btn-settings" class="fnaf-menu-btn"><span class="btn-arrow">»</span> הגדרות</button>
+      </div>
+
+      <div class="menu-footer">
+        <span>v1.0.0 Offline Edition &bull; מבוסס FNAF</span>
+        <span class="copyright">&copy; Five Nights at Yam</span>
+      </div>
+    </div>
+  </section>
+
+  <!-- ================= מעברון התחלת לילה (Night Intro Screen) ================= -->
+  <section id="night-intro-screen" class="screen">
+    <div class="intro-box">
+      <h2 id="intro-time-text">12:00 AM</h2>
+      <h3 id="intro-night-text">לילה 1</h3>
+      <div class="loading-dots"><span>.</span><span>.</span><span>.</span></div>
+    </div>
+  </section>
+
+  <!-- ================= מסך המשחק המרכזי (Game Screen) ================= -->
+  <section id="game-screen" class="screen">
+    
+    <!-- ממשק עליון (HUD) -->
+    <div id="hud-top">
+      <div class="hud-time-box">
+        <span id="hud-time">12 AM</span>
+        <span id="hud-night">לילה 1</span>
+      </div>
+      <div class="hud-power-box">
+        <div class="power-readout">
+          <span class="power-label">סוללה:</span>
+          <span id="hud-power-percent">100%</span>
+        </div>
+        <div class="usage-meter">
+          <span class="usage-label">צריכה:</span>
+          <div id="usage-bars" class="usage-bars">
+            <span class="bar active bar-green"></span>
+            <span class="bar"></span>
+            <span class="bar"></span>
+            <span class="bar"></span>
+            <span class="bar"></span>
+          </div>
+        </div>
+      </div>
+    </div>
+
+    <!-- הודעת שיחת טלפון (Phone Call Banner) -->
+    <div id="phone-call-banner" class="hidden">
+      <div class="phone-pulse-icon">📞</div>
+      <div class="phone-info">
+        <strong>הקלטת סנגור הקלוריות (Phone Guy)</strong>
+        <span id="phone-status">משמיע הנחיות לשומר...</span>
+      </div>
+      <button id="btn-mute-call" class="fnaf-btn small">השתק שיחה</button>
+    </div>
+
+    <!-- משרד השמירה הפנורמי (Security Office) -->
+    <div id="office-viewport">
+      <div id="office-room">
+        <!-- תמונת רקע המשרד -->
+        <img id="office-bg" src="images/backgrounds/room.jpg" alt="Security Office" draggable="false">
+
+        <!-- לוגו מוסד על הקיר -->
+        <img id="office-logo" src="images/backgrounds/לוגו מוסד.png" alt="Mossad Logo" draggable="false">
+
+        <!-- פוסטר לחיץ עם צפצוף באף -->
+        <div id="poster-yam" title="לחץ על האף של ים!"></div>
+
+        <!-- דמות ינוור החרדי כשהוא משתגר לתוך המשרד (Hallucination) -->
+        <div id="office-haredi-invar" class="hidden">
+          <img src="images/characters/ינוור החרדי.png" alt="Invar Haredi Hallucination" draggable="false">
+        </div>
+
+        <!-- דלת שמאל וכפתורי בקרה -->
+        <div id="left-door-zone" class="door-station">
+          <div class="door-frame">
+            <div id="left-door-shutter" class="door-shutter open"></div>
+            <div id="left-door-light-beam" class="door-light-beam">
+              <img id="left-door-enemy" class="door-enemy hidden" src="images/characters/yam_angry.png" alt="Enemy Left" draggable="false">
+            </div>
+          </div>
+          <div class="door-controls">
+            <button id="btn-left-door" class="ctrl-btn btn-door" aria-label="Door Left">
+              <span class="btn-indicator"></span>
+              <span class="btn-text">דלת</span>
+            </button>
+            <button id="btn-left-light" class="ctrl-btn btn-light" aria-label="Light Left">
+              <span class="btn-indicator"></span>
+              <span class="btn-text">אור</span>
+            </button>
+          </div>
+        </div>
+
+        <!-- דלת ימין וכפתורי בקרה -->
+        <div id="right-door-zone" class="door-station">
+          <div class="door-frame">
+            <div id="right-door-shutter" class="door-shutter open"></div>
+            <div id="right-door-light-beam" class="door-light-beam">
+              <img id="right-door-enemy" class="door-enemy hidden" src="images/characters/ים חרדי.png" alt="Enemy Right" draggable="false">
+            </div>
+          </div>
+          <div class="door-controls">
+            <button id="btn-right-door" class="ctrl-btn btn-door" aria-label="Door Right">
+              <span class="btn-indicator"></span>
+              <span class="btn-text">דלת</span>
+            </button>
+            <button id="btn-right-light" class="ctrl-btn btn-light" aria-label="Light Right">
+              <span class="btn-indicator"></span>
+              <span class="btn-text">אור</span>
+            </button>
+          </div>
+        </div>
+
+        <!-- מאוורר שולחני ואפקטים -->
+        <div id="office-fan" class="spinning-fan"></div>
+        <div id="blackout-eyes" class="hidden">
+          <div class="eye left-eye"></div>
+          <div class="eye right-eye"></div>
+        </div>
+      </div>
+    </div>
+
+    <!-- כפתור הרמת טאבלט המצלמות (Flip Bar) -->
+    <div id="camera-flip-bar" class="flip-bar">
+      <div class="flip-bar-content">
+        <span class="flip-arrow">▲</span>
+        <span class="flip-text">מצלמות אבטחה (CCTV)</span>
+        <span class="flip-arrow">▲</span>
+      </div>
+    </div>
+
+    <!-- ================= טאבלט המצלמות (CCTV Monitor) ================= -->
+    <div id="cctv-tablet" class="tablet-down">
+      <div class="tablet-frame">
+        <!-- מסך התצוגה של המצלמה הנוכחית -->
+        <div class="cctv-screen">
+          <div class="cctv-hud-top">
+            <div class="rec-dot"><span class="blink-dot">●</span> REC</div>
+            <div id="cctv-cam-title" class="cam-title">CAM 1B - הבמה המרכזית</div>
+            <div id="cctv-timestamp" class="cam-time">00:00:00</div>
+          </div>
+
+          <!-- תמונת חדר המצלמה ושכבת הדמויות -->
+          <div id="cctv-room-view" class="room-view">
+            <img id="cctv-bg-image" src="images/backgrounds/בית משפט.png" alt="CCTV Background" draggable="false">
+            <div id="cctv-characters-layer"></div>
+            <div id="cctv-glitch-layer"></div>
+          </div>
+
+          <!-- כפתור מיוחד ל-CAM 5: מתיחת תיבת הנגינה של ינוור -->
+          <div id="music-box-container" class="hidden">
+            <button id="btn-wind-music" class="fnaf-btn wind-btn">
+              <span class="wind-icon">⚙️</span>
+              <span class="wind-text">מתיחת תיבת הנגינה (השקטת ינוור)</span>
+            </button>
+            <div class="music-box-meter">
+              <div id="music-box-bar" class="music-box-bar" style="width: 100%;"></div>
+            </div>
+          </div>
+
+          <!-- מפת המבנה וכפתורי בחירת מצלמה -->
+          <div id="cctv-map-container" class="map-container">
+            <div class="map-layout">
+              <!-- שרטוט קווי מפה SVG -->
+              <svg class="map-svg-lines" viewBox="0 0 100 100" preserveAspectRatio="none">
+                <line x1="48" y1="20" x2="48" y2="40" stroke="#37e359" stroke-width="1.2" stroke-dasharray="2,2"/>
+                <line x1="48" y1="40" x2="22" y2="55" stroke="#37e359" stroke-width="1.2"/>
+                <line x1="48" y1="40" x2="74" y2="58" stroke="#37e359" stroke-width="1.2"/>
+                <line x1="22" y1="55" x2="22" y2="78" stroke="#37e359" stroke-width="1.2"/>
+                <line x1="74" y1="58" x2="74" y2="78" stroke="#37e359" stroke-width="1.2"/>
+                <line x1="22" y1="55" x2="14" y2="30" stroke="#37e359" stroke-width="1.2"/>
+                <line x1="74" y1="58" x2="76" y2="40" stroke="#37e359" stroke-width="1.2"/>
+                <line x1="74" y1="78" x2="86" y2="72" stroke="#37e359" stroke-width="1.2"/>
+                <rect x="38" y="82" width="24" height="12" fill="none" stroke="#ffffff" stroke-width="1.5"/>
+                <text x="50" y="89" fill="#ffffff" font-size="4" text-anchor="middle">אתה כאן (YOU)</text>
+              </svg>
+
+              <!-- כפתורי המצלמות -->
+              <div id="cam-buttons-grid"></div>
+            </div>
+          </div>
+        </div>
+      </div>
+    </div>
+  </section>
+
+  <!-- ================= מסך ג'אמפסקר (Jumpscare Screen) ================= -->
+  <div id="jumpscare-overlay" class="hidden">
+    <div id="jumpscare-anim-container">
+      <img id="jumpscare-image" src="images/characters/yam_angry.png" alt="Jumpscare" draggable="false">
+    </div>
+  </div>
+
+  <!-- ================= מסך GAME OVER ================= -->
+  <section id="game-over-screen" class="screen">
+    <div class="game-over-box">
+      <h1 class="glitch-text" data-text="GAME OVER">GAME OVER</h1>
+      <p id="game-over-cause" class="game-over-cause">נתפסת על ידי ים</p>
+      <p id="game-over-time-survived">שרדת עד: 3:24 AM</p>
+      <div class="game-over-actions">
+        <button id="btn-retry-night" class="fnaf-btn primary">נסה שוב</button>
+        <button id="btn-game-over-menu" class="fnaf-btn">לתפריט הראשי</button>
+      </div>
+    </div>
+  </section>
+
+  <!-- ================= מסך ניצחון 6:00 בבוקר (6 AM Win Screen) ================= -->
+  <section id="win-6am-screen" class="screen">
+    <div class="win-box">
+      <div class="win-clock-anim">
+        <span class="clock-from">5 AM</span>
+        <span class="clock-arrow">➔</span>
+        <span class="clock-to">6:00 AM</span>
+      </div>
+      <h2 id="win-night-title">סיימת את לילה 1!</h2>
+      <div class="paycheck-card">
+        <div class="paycheck-header">צ'ק משכורת שומר לילה</div>
+        <div class="paycheck-body">
+          <p>שם עובד: <strong>השומר האמיץ</strong></p>
+          <p>תפקיד: <strong>סנגור/שומר לילה במתחם ים</strong></p>
+          <p>סכום שכר: <strong>120.00 ₪</strong></p>
+        </div>
+        <div class="paycheck-stamp">שולם כחוק</div>
+      </div>
+      <div class="win-actions">
+        <button id="btn-next-night" class="fnaf-btn primary">המשך ללילה הבא</button>
+        <button id="btn-win-menu" class="fnaf-btn">לתפריט הראשי</button>
+      </div>
+    </div>
+  </section>
+
+  <!-- ================= מסך לילה מותאם אישית (Custom Night) ================= -->
+  <section id="custom-night-screen" class="screen">
+    <div class="custom-night-container">
+      <div class="custom-header">
+        <h1>CUSTOM NIGHT</h1>
+        <p>הגדרת רמות קושי לכל דמות (0 עד 20)</p>
+      </div>
+
+      <div class="characters-setup-grid">
+        <!-- ים -->
+        <div class="char-setup-card">
+          <div class="char-avatar-box">
+            <img src="images/characters/yam.png" alt="Yam">
+          </div>
+          <h3>ים (Yam)</h3>
+          <div class="ai-slider-wrap">
+            <button class="ai-btn-sub" data-char="yam">-</button>
+            <span id="ai-val-yam" class="ai-val-display">20</span>
+            <button class="ai-btn-add" data-char="yam">+</button>
+          </div>
+        </div>
+
+        <!-- ינוור -->
+        <div class="char-setup-card">
+          <div class="char-avatar-box">
+            <img src="images/characters/invar.png" alt="Invar">
+          </div>
+          <h3>ינוור (Invar)</h3>
+          <div class="ai-slider-wrap">
+            <button class="ai-btn-sub" data-char="invar">-</button>
+            <span id="ai-val-invar" class="ai-val-display">20</span>
+            <button class="ai-btn-add" data-char="invar">+</button>
+          </div>
+        </div>
+
+        <!-- ים החרדי -->
+        <div class="char-setup-card">
+          <div class="char-avatar-box">
+            <img src="images/characters/ים חרדי.png" alt="Yam Haredi">
+          </div>
+          <h3>ים החרדי</h3>
+          <div class="ai-slider-wrap">
+            <button class="ai-btn-sub" data-char="yamHaredi">-</button>
+            <span id="ai-val-yamHaredi" class="ai-val-display">20</span>
+            <button class="ai-btn-add" data-char="yamHaredi">+</button>
+          </div>
+        </div>
+
+        <!-- ינוור החרדי -->
+        <div class="char-setup-card">
+          <div class="char-avatar-box">
+            <img src="images/characters/ינוור החרדי.png" alt="Invar Haredi">
+          </div>
+          <h3>ינוור החרדי</h3>
+          <div class="ai-slider-wrap">
+            <button class="ai-btn-sub" data-char="invarHaredi">-</button>
+            <span id="ai-val-invarHaredi" class="ai-val-display">20</span>
+            <button class="ai-btn-add" data-char="invarHaredi">+</button>
+          </div>
+        </div>
+      </div>
+
+      <!-- כפתורי פריסטים מהירים -->
+      <div class="custom-presets">
+        <button class="preset-btn" data-preset="easy">קל (5/5/5/0)</button>
+        <button class="preset-btn" data-preset="medium">בינוני (10/10/10/5)</button>
+        <button class="preset-btn" data-preset="hard">קשה (15/15/15/10)</button>
+        <button class="preset-btn gold" data-preset="max">20/20/20/20 סיוט</button>
+      </div>
+
+      <div class="custom-actions">
+        <button id="btn-start-custom-night" class="fnaf-btn primary large">התחל משחק</button>
+        <button id="btn-back-from-custom" class="fnaf-btn">חזרה לתפריט</button>
+      </div>
+    </div>
+  </section>
+
+  <!-- ================= חלון מודאל הגדרות (Settings Modal) ================= -->
+  <div id="settings-modal" class="modal hidden">
+    <div class="modal-content">
+      <div class="modal-header">
+        <h2>הגדרות משחק</h2>
+        <button id="btn-close-settings" class="btn-close">&times;</button>
+      </div>
+      <div class="modal-body">
+        <div class="setting-row">
+          <label for="vol-master">עוצמת סאונד ראשית (Master)</label>
+          <input type="range" id="vol-master" min="0" max="100" value="80">
+          <span id="val-vol-master">80%</span>
+        </div>
+        <div class="setting-row">
+          <label for="vol-music">מוזיקה (Music)</label>
+          <input type="range" id="vol-music" min="0" max="100" value="70">
+          <span id="val-vol-music">70%</span>
+        </div>
+        <div class="setting-row">
+          <label for="vol-sfx">אפקטים קוליים (SFX)</label>
+          <input type="range" id="vol-sfx" min="0" max="100" value="85">
+          <span id="val-vol-sfx">85%</span>
+        </div>
+        <div class="setting-row">
+          <label for="pan-sens">רגישות תזוזת מבט (מגע ועכבר)</label>
+          <input type="range" id="pan-sens" min="50" max="200" value="100">
+          <span id="val-pan-sens">100%</span>
+        </div>
+        <div class="setting-row toggle-row">
+          <span>אפקט מסך CRT ורעש וידאו</span>
+          <label class="switch">
+            <input type="checkbox" id="toggle-crt" checked>
+            <span class="slider"></span>
+          </label>
+        </div>
+        <div class="setting-row">
+          <button id="btn-toggle-fullscreen" class="fnaf-btn full-width">מסך מלא (Fullscreen)</button>
+        </div>
+        <div class="setting-row danger-zone">
+          <button id="btn-reset-save" class="fnaf-btn danger full-width">איפוס נתוני שמירה</button>
+        </div>
+      </div>
+    </div>
+  </div>
+
+  <!-- ================= חלון מדריך הישרדות (How to Play Modal) ================= -->
+  <div id="how-to-play-modal" class="modal hidden">
+    <div class="modal-content large">
+      <div class="modal-header">
+        <h2>מדריך הישרדות למשמרת לילה</h2>
+        <button id="btn-close-guide" class="btn-close">&times;</button>
+      </div>
+      <div class="modal-body guide-grid">
+        <div class="guide-card">
+          <div class="guide-icon">🚪💡</div>
+          <h3>דלתות ותאורה</h3>
+          <p>הדלתות והאורות בצדדים שומרים עליך. הדלק את האור לבדוק אם מישהו מציץ בפתח. סגור את הדלת מיד אם אתה רואה אויב!</p>
+        </div>
+        <div class="guide-card">
+          <div class="guide-icon">🔋</div>
+          <h3>ניהול סוללה</h3>
+          <p>הסוללה מוגבלת! כל דלת סגורה, אור דולק או שימוש במצלמה שואבים חשמל במהירות. אם תגיע ל-0%, החשמל ייכבה לחלוטין...</p>
+        </div>
+        <div class="guide-card">
+          <div class="guide-icon">🏃‍♂️ ינוור</div>
+          <h3>ינוור הראנר (Invar)</h3>
+          <p>ינוור אורב ב-CAM 5. שמור עליו במצלמה ומתח את תיבת הנגינה. אם הוא מתחיל לרוץ במסדרון שמאל – סגור את דלת שמאל במהירות שיא!</p>
+        </div>
+        <div class="guide-card">
+          <div class="guide-icon">👻 ינוור החרדי</div>
+          <h3>ינוור החרדי (Nightmare)</h3>
+          <p>משתגר באופן מסתורי ישירות למשרד שלך! אם אתה רואה אותו יושב מולך, הרם מיד את טאבלט המצלמות כדי להבריח אותו לפני ג'אמפסקר קטלני!</p>
+        </div>
+        <div class="guide-card">
+          <div class="guide-icon">📱</div>
+          <h3>שליטה בטלפון</h3>
+          <p>גרור את האצבע על המסך להזזת המבט. לחץ על הפס בתחתית כדי להרים ולהוריד את המצלמות.</p>
+        </div>
+      </div>
+    </div>
+  </div>
+
+  <!-- קבצי הסקריפט של המשחק -->
+  <script src="config.js"></script>
+  <script src="game.js"></script>
+</body>
+</html>

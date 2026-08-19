@@ -1,0 +1,22 @@
+{
+  "name": "Five Nights at Yam",
+  "short_name": "FNAY",
+  "description": "חמישה לילות אצל ים - משחק אימה והישרדות אותנטי",
+  "start_url": "./index.html",
+  "display": "standalone",
+  "orientation": "landscape",
+  "background_color": "#050508",
+  "theme_color": "#050508",
+  "icons": [
+    {
+      "src": "images/characters/yam.png",
+      "sizes": "192x192",
+      "type": "image/png"
+    },
+    {
+      "src": "images/characters/yam.png",
+      "sizes": "512x512",
+      "type": "image/png"
+    }
+  ]
+}
