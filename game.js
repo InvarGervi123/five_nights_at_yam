@@ -52,8 +52,17 @@ class SaveManager {
   unlockNight(nightNum) {
     if (nightNum > this.data.unlockedNight) {
       this.data.unlockedNight = nightNum;
-      this.save();
     }
+    this.data.currentNight = this.data.unlockedNight;
+    this.save();
+  }
+
+  setCurrentNight(nightNum) {
+    this.data.currentNight = nightNum;
+    if (nightNum > this.data.unlockedNight) {
+      this.data.unlockedNight = nightNum;
+    }
+    this.save();
   }
 
   awardStar(index) {
@@ -492,7 +501,10 @@ class FiveNightsAtYam {
   bindEvents() {
     // תפריט ראשי
     this.dom.menu.btnNewGame.addEventListener('click', () => this.startNight(1));
-    this.dom.menu.btnContinue.addEventListener('click', () => this.startNight(this.saveManager.data.currentNight));
+    this.dom.menu.btnContinue.addEventListener('click', () => {
+      const nightToLoad = Math.max(this.saveManager.data.currentNight || 1, this.saveManager.data.unlockedNight || 1);
+      this.startNight(nightToLoad);
+    });
     this.dom.menu.btnNight6.addEventListener('click', () => this.startNight(6));
     this.dom.menu.btnCustomNight.addEventListener('click', () => this.openCustomNightScreen());
     this.dom.menu.btnHowToPlay.addEventListener('click', () => this.openGuideModal());
@@ -778,6 +790,9 @@ class FiveNightsAtYam {
   startNight(nightNum, custom = false) {
     this.currentNight = nightNum;
     this.isCustomNight = custom;
+    if (!custom) {
+      this.saveManager.setCurrentNight(nightNum);
+    }
     this.gameHour = 0;
     this.hourProgress = 0;
     this.power = GAME_CONFIG.power.startPower;
